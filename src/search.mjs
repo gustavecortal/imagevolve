@@ -15,7 +15,7 @@ const SIMILAR = 0.92;
 // viewer sees one idea four times. Blind reviewers preferred pools with this limit 3 to 2, one tie.
 const SHARED = 3;
 
-// A copy of the recipe with one or two random changes: a parameter, a strength, a node inserted, deleted,
+// A copy of the recipe with one or more random changes: a parameter, a strength, a node inserted, deleted,
 // replaced, repeated or moved, a region added, moved or removed, or a stretch of another recipe spliced in.
 function mutate(recipe, rnd, other) {
   const out = normalized(recipe);

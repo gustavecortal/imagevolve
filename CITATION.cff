@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "Please cite imagevolve if you use it."
 type: software
-title: "imagevolve: text-guided image evolution"
+title: "imagevolve: CLIP-guided evolution of image transformations"
 abstract: >-
   A CLIP-guided evolutionary search over deterministic image transformations that bring
   your picture closer to your words.
@@ -14,7 +14,17 @@ license: MIT
 date-released: "2026-11-04"
 keywords:
   - CLIP
-  - evolutionary search
+  - evolutionary algorithm
+  - genetic programming
+  - text-guided image editing
   - image transformation
   - generative art
-  - ONNX Runtime
+references:
+  - type: article
+    title: "Learning Transferable Visual Models From Natural Language Supervision"
+    authors:
+      - family-names: Radford
+        given-names: Alec
+      - name: "et al."
+    year: 2021
+    url: "https://arxiv.org/abs/2103.00020"

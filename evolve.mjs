@@ -3,8 +3,7 @@
 //   node evolve.mjs photo.jpg "a storm at sea"                    random recipes
 //   node evolve.mjs photo.jpg "a storm at sea" --keep out/3.json  children of a kept variant, bred from its recipe
 //
-// Options: --proposals N (default 800), --seed N (default 1), --out DIR (default out), --size N, the longest edge of
-// the saved pictures in pixels (default 2048).
+// Run with --help for the options.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import sharp from "sharp";
@@ -14,18 +13,31 @@ import { promptDirection } from "./src/score.mjs";
 import { entry, select, step } from "./src/search.mjs";
 
 const POOL = 8, BATCH = 8;
-const { values: opts, positionals: [photo, phrase] } = parseArgs({
-  allowPositionals: true,
-  options: {
-    proposals: { type: "string", default: "800" }, seed: { type: "string", default: "1" },
-    out: { type: "string", default: "out" }, size: { type: "string", default: "2048" }, keep: { type: "string" },
-  },
-});
-const [proposals, seed, size] = [opts.proposals, opts.seed, opts.size].map(Number);
-if (!photo || !phrase || ![proposals, seed, size].every(Number.isInteger) || proposals < 1 || size < 1) {
-  console.error('Usage: node evolve.mjs <photo> "<phrase>" [--proposals N] [--seed N] [--out DIR] [--size N] [--keep FILE]');
-  process.exit(1);
+const USAGE = `Usage: node evolve.mjs <photo> "<phrase>" [options]
+  --proposals N  variants to try (800)
+  --seed N       seed of the random programs (1)
+  --out DIR      where the eight kept variants go (out)
+  --size N       longest edge of the saved pictures, in pixels (2048)
+  --keep FILE    breed from a kept variant's .json, made from the same photo`;
+const usage = (code) => { (code ? console.error : console.log)(USAGE); process.exit(code); };
+let parsed;
+try {
+  parsed = parseArgs({
+    allowPositionals: true,
+    options: {
+      proposals: { type: "string", default: "800" }, seed: { type: "string", default: "1" },
+      out: { type: "string", default: "out" }, size: { type: "string", default: "2048" }, keep: { type: "string" },
+      help: { type: "boolean", short: "h" },
+    },
+  });
+} catch (error) {
+  console.error(error.message);
+  usage(1);
 }
+const { values: opts, positionals: [photo, phrase] } = parsed;
+if (opts.help) usage(0);
+const [proposals, seed, size] = [opts.proposals, opts.seed, opts.size].map(Number);
+if (!photo || !phrase || ![proposals, seed, size].every(Number.isInteger) || proposals < 1 || size < 1) usage(1);
 
 // The photograph, oriented by its EXIF tag, fitted inside long x long pixels as float RGB.
 const photograph = sharp(photo).rotate();

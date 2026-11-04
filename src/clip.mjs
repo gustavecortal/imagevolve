@@ -11,7 +11,7 @@ import * as ort from "onnxruntime-node";
 // The scorer: the Hugging Face repository and revision it pins, its model files with their SHA-256, and the neutral
 // text directions start from. The text model is Xenova's q4f16 export of CLIP ViT-B/32 with its token table in 8 bits.
 // The vision model reads 160 px rather than CLIP's 224 and holds 8-bit weights computed in int8: its direction scores
-// follow float32's at a correlation of 0.998. export.py rebuilds both. 154 MB to download.
+// follow float32's with a correlation of 0.998 at the median. export.py rebuilds both. 156 MB to download.
 const repo = "gustavecortal/imagevolve-clip-vit-base-patch32", revision = "9c0448904d1e00771f11c9bccb195c4c6d19e946", neutral = "a photograph";
 const files = { text: "onnx/text_model_q4f16_t8.onnx", vision: "onnx/vision_model_q8a4_160.onnx" }, size = 160;
 const sha256 = {
