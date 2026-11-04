@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "Please cite imagevolve if you use it."
+type: software
+title: "imagevolve: text-guided image evolution"
+abstract: >-
+  A CLIP-guided evolutionary search over deterministic image transformations that bring
+  your picture closer to your words.
+authors:
+  - family-names: Cortal
+    given-names: Gustave
+repository-code: "https://github.com/gustavecortal/imagevolve"
+url: "https://gustavecortal.com/imagevolve/"
+license: MIT
+date-released: "2026-11-04"
+keywords:
+  - CLIP
+  - evolutionary search
+  - image transformation
+  - generative art
+  - ONNX Runtime
