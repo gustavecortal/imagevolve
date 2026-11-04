@@ -7,7 +7,7 @@ const TAU = 2 * Math.PI;
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const luma = (r, g, b) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
 
-// Longest edge of candidates during search, in pixels. Export renders the same recipe larger.
+// Longest edge of candidates during search, in pixels. evolve.mjs renders the kept recipes larger.
 export const WORKING = 320;
 
 // Each operation lists its parameters as [min, max, default], whether its value is an integer (int: [...names]),
@@ -296,8 +296,7 @@ const REGION = {
 
 // Scratch buffers kept between renders (each is written whole before it is read), so the search does not allocate
 // several picture-sized arrays per candidate.
-// Named: "fx" each operation's output in render, "blurA" and "blurB" the blur's passes, "luma" the ink lines'. Release
-// them (releaseScratch) after a large render, such as a save, so they do not stay at that size.
+// Named: "fx" each operation's output in render, "blurA" and "blurB" the blur's passes, "luma" the ink lines'.
 const scratchPool = new Map();
 
 // Apply a recipe to an image. Unknown operations or parameters and non-finite values throw. Values are clamped
@@ -517,24 +516,22 @@ const COARSE = 12, FINE = 24;
 const contrast = (img) => contrastOf(cells(img, COARSE));
 const featureless = (img) => featurelessOf(cells(img, FINE));
 
-// A picture that reads as empty. With the source given, the limits loosen for a source that is itself plain (a
-// drawing on white), so its variants are not all rejected: half its contrast at most, and its featureless share
-// plus 0.05 at least.
-const flat = (coarse, fine, source) => {
-  const l = source ? limits(source) : FLAT;
-  return contrastOf(coarse) < l.contrast || featurelessOf(fine) > l.featureless;
+// A picture that reads as empty. The limits loosen for a source that is itself plain (a drawing on white), so its
+// variants are not all rejected: half its contrast at most, and its featureless share plus 0.05 at least.
+export const isFlat = (img, source) => {
+  const l = limits(source);
+  return contrast(img) < l.contrast || featureless(img) > l.featureless;
 };
-export const isFlat = (img, source) => flat(cells(img, COARSE), cells(img, FINE), source);
 
 // How far a picture moved from the source: the mean change of a pixel (the mean of its channels' changes), and the
-// share of pixels that changed by more than `over`.
+// share of pixels that changed by more than OVER.
 const OVER = 0.3;
-function change({ data }, source, over = OVER) {
+function change({ data }, source) {
   let sum = 0, moved = 0;
   for (let i = 0; i < data.length; i += 3) {
     const d = (Math.abs(data[i] - source.data[i]) + Math.abs(data[i + 1] - source.data[i + 1]) + Math.abs(data[i + 2] - source.data[i + 2])) / 3;
     sum += d;
-    if (d > over) moved++;
+    if (d > OVER) moved++;
   }
   const n = data.length / 3;
   return { mean: sum / n, moved: moved / n };

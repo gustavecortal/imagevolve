@@ -1,24 +1,23 @@
 // The search: random recipes, or children of a kept entry, and a pool kept varied by comparing the candidates'
-// image embeddings. Pure logic, the same as on the web page.
-// An entry is { recipe, emb, delta, score }: emb the candidate's unit image embedding, delta its change from the
-// original's, score the length of that change along the prompt's unit direction. Unlike the cosine between the
+// image embeddings. An entry is { recipe, emb, score }: emb the candidate's unit image embedding, score the length of
+// its change from the original's embedding along the prompt's unit direction. Unlike the cosine between the
 // two, this rewards a larger change: with the cosine, the search settled on lightly altered photographs, and a
 // blind reviewer preferred random recipes, which change more.
 import { OPS, barelyChanged, isFlat, normalized, render } from "./effects.mjs";
 import { randomNode, randomRecipe, randomRegion, round, tidy } from "./recipes.mjs";
-import { dot, sub } from "./objective.mjs";
+import { dot, sub } from "./score.mjs";
 
 const MAX_NODES = 8;
 // Two pictures whose image embeddings have a cosine above this look alike: a candidate this close to the original
 // reads as the photograph unchanged (a blind reviewer's judgment), and one this close to a pool entry as a duplicate.
 const SIMILAR = 0.92;
 // At most this many kept entries use any one operation: CLIP tells four tile shuffles in different colours apart, a
-// visitor sees one idea four times. Blind reviewers preferred pools with this limit 3 to 2, one tie.
+// viewer sees one idea four times. Blind reviewers preferred pools with this limit 3 to 2, one tie.
 const SHARED = 3;
 
 // A copy of the recipe with one or two random changes: a parameter, a strength, a node inserted, deleted,
 // replaced, repeated or moved, a region added, moved or removed, or a stretch of another recipe spliced in.
-export function mutate(recipe, rnd, other) {
+function mutate(recipe, rnd, other) {
   const out = normalized(recipe);
   do change(out, rnd, other);
   while (rnd() < 0.35);
@@ -77,47 +76,36 @@ function reshape(node, rnd) {
 // Recipes to score next: random ones, or with a pinned entry, three in four children of the best entry that looks
 // like it (itself or a refinement, see select), crossed with another entry now and then. At an equal budget, blind
 // reviewers preferred the varied pool of random recipes to one bred automatically, which collapsed onto one look.
-export function propose(pool, n, rnd) {
+function propose(pool, n, rnd) {
   const pinned = pool.find((e) => e.pinned), any = () => pool[Math.floor(rnd() * pool.length)];
   const parent = pinned && pool.reduce((a, e) => (e.score > a.score && dot(e.emb, pinned.emb) >= SIMILAR ? e : a), pinned);
   return Array.from({ length: n }, () => (parent && rnd() < 0.75 ? mutate(parent.recipe, rnd, any().recipe) : randomRecipe(rnd)));
 }
 
-// An entry for a rendered recipe and its unit image embedding.
-function entry(recipe, out, emb, { orig, direction, id }) {
-  const delta = sub(emb, orig);
-  return { id: id(), recipe, out, emb, delta, score: dot(delta, direction) };
+// An entry for a recipe and its unit image embedding. options: orig, the original's embedding, and direction.
+export function entry(recipe, emb, { orig, direction }) {
+  return { recipe, emb, score: dot(sub(emb, orig), direction) };
 }
 
-// The recipes rendered from the source, without those that render flat or barely changed.
-export function renderChildren(source, recipes) {
-  return recipes.flatMap((recipe) => {
+// One batch: `batch` proposed recipes rendered from the source, without those that render flat or barely changed,
+// embedded (embed: images => unit vectors), and scored, without those whose embedding barely moved from the
+// original's. Returns the new entries, unselected.
+export async function step(pool, options) {
+  const { source, embed, rnd, batch, orig } = options;
+  const children = propose(pool, batch, rnd).flatMap((recipe) => {
     const out = render(source, recipe);
     return isFlat(out, source) || barelyChanged(out, source) ? [] : [{ recipe, out }];
   });
-}
-
-// Entries for rendered children and their unit image embeddings, without those whose embedding barely moved from
-// the original's. options: orig, direction, id (a function giving the next id).
-export function scored(children, vecs, options) {
-  return children.flatMap(({ recipe, out }, k) => (dot(vecs[k], options.orig) > SIMILAR ? [] : [entry(recipe, out, vecs[k], options)]));
-}
-
-// One microbatch, as the Node scripts run it: `batch` proposed recipes rendered, embedded (embed: images => unit
-// vectors) and scored. Returns the new entries, unselected.
-export async function step(pool, options) {
-  const { source, embed, rnd, batch = 4 } = options;
-  const children = renderChildren(source, propose(pool, batch, rnd));
-  return scored(children, children.length ? await embed(children.map((c) => c.out)) : [], options);
+  const vecs = children.length ? await embed(children.map((c) => c.out)) : [];
+  return children.flatMap(({ recipe }, k) => (dot(vecs[k], orig) > SIMILAR ? [] : [entry(recipe, vecs[k], options)]));
 }
 
 // The best entries, at most `size`, best first, skipping any that looks like one already kept. Before a pick, an
 // entry using an operation that SHARED of them already use waits for places left over, so the pool favours variety
 // but never shrinks (after a pick, it is meant to hold the pick's children, which share its operations). A pinned
 // entry is always kept, and comes first. So is the best entry that looks like it alone and scores higher: a
-// refinement of the visitor's pick, which its children then come from. Without it, about a fifth of the proposals
-// after a pick were better versions of it, dropped as its duplicates. An entry the visitor is looking at is kept too,
-// so it does not leave the stage, but it does not hold back better entries like it.
+// refinement of the pick, which its children then come from. Without it, about a fifth of the proposals after a
+// pick were better versions of it, dropped as its duplicates.
 export function select(entries, size) {
   const pinned = entries.find((e) => e.pinned), kept = pinned ? [pinned] : [], uses = new Map(), waiting = [];
   const alike = (e) => kept.filter((k) => dot(k.emb, e.emb) >= SIMILAR);
@@ -135,9 +123,6 @@ export function select(entries, size) {
     if (kept.length >= size) break;
     if (!alike(e).length) kept.push(e);
   }
-  // The entry on the stage stays, in place of the last kept, without holding back entries that look like it.
-  const viewed = entries.find((e) => e.viewed);
-  if (viewed && !kept.includes(viewed)) kept.splice(Math.min(kept.length, size - 1), 1, viewed);
   return kept.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.score - a.score);
 }
 

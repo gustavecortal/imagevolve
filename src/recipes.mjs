@@ -1,5 +1,5 @@
 // Random recipes over the operation table: the search's proposals, and fresh ones beside a kept variant's children.
-import { OPS, random } from "./effects.mjs";
+import { OPS } from "./effects.mjs";
 
 const NAMES = Object.keys(OPS);
 

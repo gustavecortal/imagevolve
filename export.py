@@ -23,7 +23,7 @@ from onnx import TensorProto, helper, numpy_helper
 from onnxruntime.quantization.matmul_nbits_quantizer import MatMulNBitsQuantizer
 
 SOURCE, REVISION = "Xenova/clip-vit-base-patch32", "d15189d7028b43f1d3e65039190477f6af591c2a"
-# The files evolve.mjs downloads (SCORER in src/objective.mjs).
+# The files evolve.mjs downloads (SCORER in src/clip.mjs).
 TARGET, TARGET_REVISION = "gustavecortal/imagevolve-clip-vit-base-patch32", "9c0448904d1e00771f11c9bccb195c4c6d19e946"
 OUT = Path(sys.argv[1] if len(sys.argv) > 1 else "export")
 FILES = ["tokenizer.json", "tokenizer_config.json", "onnx/vision_model_q8a4_160.onnx", "onnx/text_model_q4f16_t8.onnx"]

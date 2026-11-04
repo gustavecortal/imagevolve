@@ -1,16 +1,33 @@
 // CLIP ViT-B/32 text and image embeddings from ONNX Runtime: the model's own tokenizer, the processor's resizing and
-// normalization (clip-input.mjs), the projection models' embeddings, L2-normalized. The model files are downloaded
-// from the Hub at the revision objective.mjs pins, checked against their SHA-256, and kept in models/.
+// normalization (pixelValues, below), the projection models' embeddings, L2-normalized. The model files are downloaded
+// from the Hub at the revision SCORER pins, checked against their SHA-256, and kept in models/.
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Tokenizer } from "@huggingface/tokenizers";
 import * as ort from "onnxruntime-node";
-import { SIZE, pixelValues } from "./clip-input.mjs";
-import { SCORER, unit } from "./objective.mjs";
+
+// The scorer: the Hugging Face repository and revision it pins, its model files with their SHA-256, and the neutral
+// text directions start from. The text model is Xenova's q4f16 export of CLIP ViT-B/32 with its token table in 8 bits.
+// The vision model reads 160 px rather than CLIP's 224 and holds 8-bit weights computed in int8: its direction scores
+// follow float32's at a correlation of 0.998. export.py rebuilds both. 154 MB to download.
+const repo = "gustavecortal/imagevolve-clip-vit-base-patch32", revision = "9c0448904d1e00771f11c9bccb195c4c6d19e946", neutral = "a photograph";
+const files = { text: "onnx/text_model_q4f16_t8.onnx", vision: "onnx/vision_model_q8a4_160.onnx" }, size = 160;
+const sha256 = {
+  "tokenizer.json": "f7f3b7af117d467b58374797691a6438d3e6b9e9cef800dfd5dced7f697a90cd",
+  "tokenizer_config.json": "60ba2912bc6344c94bc16bbdec27fa1209409167b6f2fdf3cfe9e65462ea3967",
+  [files.text]: "7bc26c12ca135542a3d01040f7707bb617ba4629bd2bb44529d5ae7ed451f888",
+  [files.vision]: "60a67699aef19887f4cf6c7b076407b2607cfac7c2b0f9c1239c9202121ece63",
+};
+export const SCORER = {
+  repo, revision, files, sha256, size, neutral, key: `${repo}@${revision.slice(0, 7)} "${neutral}"`,
+};
+
 
 const CONTEXT = 77;  // tokens
+const SIZE = SCORER.size, PLANE = SIZE * SIZE;
+const MEAN = [0.48145466, 0.4578275, 0.40821073], STD = [0.26862954, 0.26130258, 0.27577711];
 const END = 49407;  // <|endoftext|>
 
 // A file of the scorer's repository as bytes: the copy in models/ when its SHA-256 is the pinned one, else the Hub's.
@@ -69,6 +86,66 @@ export async function loadClip() {
 // One output's rows, L2-normalized.
 function rows(outputs, name) {
   const e = outputs[name], [n, d] = e.dims, out = [];
-  for (let i = 0; i < n; i++) out.push(unit(e.data.slice(i * d, (i + 1) * d)));
+  for (let i = 0; i < n; i++) {
+    const row = e.data.slice(i * d, (i + 1) * d), norm = Math.hypot(...row);  // float32, as the page computes it
+    out.push(row.map((v) => v / norm));
+  }
+  return out;
+}
+
+// CLIP's image input: the whole picture squashed to SIZE x SIZE by an area average (no crop), then normalized as
+// CLIP's processor does, as planar floats.
+// For each output index along one axis of `from` pixels, the source indices it averages and their weights
+// (summing to 1). The area average is separable, so a picture is resized along x, then along y.
+const axes = new Map();
+function taps(from) {
+  if (!axes.has(from)) {
+    const s = from / SIZE, index = [], weight = [];
+    for (let x = 0; x < SIZE; x++) {
+      const x0 = x * s, x1 = x0 + s, i = [], w = [];
+      // Clamped: x1 can land a rounding error past the edge.
+      for (let k = Math.floor(x0), end = Math.min(Math.ceil(x1), from); k < end; k++) { i.push(k); w.push(Math.min(x1, k + 1) - Math.max(x0, k)); }
+      const n = w.reduce((a, b) => a + b, 0);
+      index.push(i); weight.push(w.map((v) => v / n));
+    }
+    axes.set(from, { index, weight });
+  }
+  return axes.get(from);
+}
+
+let rowsBuffer = new Float32Array(0);
+
+// An image ({ data, width, height }, RGB floats in [0, 1]) as CLIP's pixel values: 3 planes of SIZE x SIZE.
+function pixelValues({ data, width, height }) {
+  const tx = taps(width), ty = taps(height), out = new Float32Array(3 * PLANE);
+  if (rowsBuffer.length < height * SIZE * 3) rowsBuffer = new Float32Array(height * SIZE * 3);
+  const rows = rowsBuffer;
+  // Along x: every source row to SIZE columns.
+  for (let y = 0; y < height; y++) {
+    const from = y * width * 3, to = y * SIZE * 3;
+    for (let x = 0; x < SIZE; x++) {
+      const index = tx.index[x], weight = tx.weight[x];
+      let r = 0, g = 0, b = 0;
+      for (let k = 0; k < index.length; k++) {
+        const o = from + 3 * index[k], w = weight[k];
+        r += w * data[o]; g += w * data[o + 1]; b += w * data[o + 2];
+      }
+      rows[to + 3 * x] = r; rows[to + 3 * x + 1] = g; rows[to + 3 * x + 2] = b;
+    }
+  }
+  // Along y, then normalized into planes.
+  const a0 = 1 / STD[0], a1 = 1 / STD[1], a2 = 1 / STD[2], b0 = MEAN[0] / STD[0], b1 = MEAN[1] / STD[1], b2 = MEAN[2] / STD[2];
+  for (let y = 0; y < SIZE; y++) {
+    const index = ty.index[y], weight = ty.weight[y];
+    for (let x = 0; x < SIZE; x++) {
+      let r = 0, g = 0, b = 0;
+      for (let k = 0; k < index.length; k++) {
+        const o = (index[k] * SIZE + x) * 3, w = weight[k];
+        r += w * rows[o]; g += w * rows[o + 1]; b += w * rows[o + 2];
+      }
+      const p = y * SIZE + x;
+      out[p] = r * a0 - b0; out[PLANE + p] = g * a1 - b1; out[2 * PLANE + p] = b * a2 - b2;
+    }
+  }
   return out;
 }

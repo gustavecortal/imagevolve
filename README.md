@@ -47,10 +47,11 @@ The search keeps the eight best variants that do not look alike, their image emb
 | [`src/effects.mjs`](src/effects.mjs) | The 17 image operations and their soft masks |
 | [`src/recipes.mjs`](src/recipes.mjs) | Random programs |
 | [`src/search.mjs`](src/search.mjs) | Proposals, mutations and the choice of the eight kept variants |
-| [`src/direction.mjs`](src/direction.mjs) | The text direction a variant is scored along |
-| [`src/clip.mjs`](src/clip.mjs) | CLIP embeddings with ONNX Runtime |
+| [`src/score.mjs`](src/score.mjs) | The text direction a variant is scored along |
+| [`src/bank.txt`](src/bank.txt) | The 430 generic phrases whose mean direction is removed |
+| [`src/clip.mjs`](src/clip.mjs) | The pinned CLIP model and its embeddings with ONNX Runtime |
 | [`evolve.mjs`](evolve.mjs) | The command-line search |
-| [`direction-bank.mjs`](direction-bank.mjs) | Rebuilds the mean direction of the 430 generic phrases |
+| [`direction-bank.mjs`](direction-bank.mjs) | Rebuilds that mean, `src/bank.json` |
 | [`export.py`](export.py) | Rebuilds the model files from Xenova's ONNX export of CLIP |
 | [`test.mjs`](test.mjs) | Checks that programs render deterministically |
 

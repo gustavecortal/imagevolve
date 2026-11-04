@@ -1,31 +1,15 @@
-// Writes src/direction-bank.json for the page's scorer (SCORER): the mean of the bank's unit directions from the
-// neutral text (BANK, below), which src/direction.mjs removes from each prompt's direction, so the search does not
-// encode the bank. Run again whenever SCORER changes.
+// Writes src/bank.json: the mean of the unit directions from the neutral text to each phrase of src/bank.txt,
+// which src/score.mjs removes from every prompt's direction. Run again whenever SCORER changes.
 // Usage: node direction-bank.mjs
-import { writeFileSync } from "node:fs";
-import { loadClip } from "./src/clip.mjs";
-import { SCORER, sub, unit } from "./src/objective.mjs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { SCORER, loadClip } from "./src/clip.mjs";
+import { sub, unit } from "./src/score.mjs";
 
-const words = `
-joy|sadness|anger|fear|calm|love|hope|despair|shame|pride|envy|boredom|surprise|disgust|awe|wonder|relief|regret|longing|serenity|rage|panic|bliss|melancholy|euphoria|guilt|curiosity|confusion|contentment|excitement|jealousy|gratitude|peace|tension|desire|indifference|courage|innocence|cruelty|kindness|exhaustion|restlessness|ecstasy|dread|hunger|sleep|waking up|laughter|tears
-chaos|order|silence|a dream|a memory|speed|time|eternity|infinity|death|birth|growth|decay|change|freedom|prison|power|weakness|balance|harmony|conflict|war|peace treaty|a secret|a lie|truth|faith|doubt|chance|fate|luck|danger|safety|absence|presence|distance|closeness|movement|stillness|rhythm|noise|music|a song|a whisper|a scream|an echo|a heartbeat|breath|a question|an answer|a promise|a farewell|a reunion|a journey|home|exile|childhood|old age|youth|the future|the past|the present moment
-the sea|a lake|a river|a waterfall|rain|snow|fog|mist|thunder|lightning|wind|a hurricane|a tornado|an earthquake|a volcano|lava|fire|smoke|ash|ice|frost|a glacier|a cave|a mountain|a valley|a cliff|a beach|sand dunes|a jungle|a forest|a meadow|a garden|flowers|autumn leaves|a tree|roots|moss|mushrooms|the sky|clouds|a sunset|a sunrise|the moon|stars|a galaxy|outer space|the sun|an eclipse|the northern lights|a rainbow|the night sky
-the city|the city at night|a street|a highway|a bridge|a tunnel|a subway station|an airport|a train station|a harbour|a factory|a power plant|a construction site|a skyscraper|a cathedral|a temple|a ruin|an abandoned house|a hospital|a school|a library|a museum|a theatre|a nightclub|a market|a kitchen|a bedroom|a bathroom|a staircase|a corridor|a window|a door|a mirror|a garage|a parking lot|a playground|a cemetery|a prison cell|a castle|a village|a farm|a suburb|a stadium|a carnival|a casino|an office|a laboratory|a greenhouse|a lighthouse|a shipwreck
-summer|winter|spring|autumn|morning|noon|evening|midnight|dawn|dusk|a holiday|a birthday|a wedding|a funeral|a festival|a parade|a riot|a protest|a ceremony|a party
-a machine|a robot|a computer|a screen|a television|a clock|a car|a train|a ship|an airplane|a rocket|a bicycle|a gun|a knife|a key|a lock|a chain|a rope|a wheel|a coin|money|a book|a letter|a map|a telephone|a lamp|a candle|a chair|a bed|a table|a glass of water|bread|wine|blood|bones|a skull|an eye|a hand|a face|the body|hair|skin|a heart|a brain|a crowd|a child|an old man|a woman|a man|a dancer|a soldier|a king|a ghost|an angel|a monster|a god
-a horse|a dog|a cat|a bird|a fish|a snake|a spider|an insect|a butterfly|a whale|a wolf|a lion|an owl|a crow|a jellyfish
-banded|blotchy|braided|bubbly|bumpy|chequered|cobwebbed|cracked|crosshatched|crystalline|dotted|fibrous|flecked|freckled|frilly|gauzy|a grid|grooved|honeycombed|interlaced|knitted|lacelike|lined|marbled|matted|meshed|paisley|perforated|pitted|pleated|polka-dotted|porous|potholed|scaly|smeared|spiralled|sprinkled|stained|stratified|striped|studded|swirly|veined|waffled|woven|wrinkled|zigzagged
-red|orange|yellow|green|blue|purple|pink|brown|black|white|grey|gold|silver|neon|pastel colours|dark|bright|shadow|light|glow|reflection|a silhouette|contrast|blur|darkness|brightness|colour|monochrome|sepia|vivid colours
-a painting|a drawing|a sketch|a watercolour|an oil painting|a mosaic|a stained glass window|a collage|a photograph of a person|a film still|a poster|a comic|graffiti|a tattoo|a sculpture|a pattern|a texture|an abstract painting|a diagram|a map of a city|a blueprint|an x-ray|a microscope image|a satellite image|a glitch|pixel art|a hologram|a kaleidoscope|a fractal|a geometric pattern|impressionism|cubism|surrealism|expressionism|pop art|minimalism|baroque|art nouveau|psychedelic art|ukiyo-e|a renaissance painting|a cave painting|a children's drawing|street photography|a polaroid|a vintage photograph|a postcard|an advertisement|a magazine cover|a video game
-`;
-const BANK = words.trim().split(/\n|\|/).map((s) => s.trim()).filter(Boolean);
-
-const scorer = await loadClip(), [neutral, ...bank] = await scorer.embedTexts([SCORER.neutral, ...BANK]);
+const phrases = readFileSync(new URL("src/bank.txt", import.meta.url), "utf8").trim().split("\n");
+const scorer = await loadClip(), [neutral, ...bank] = await scorer.embedTexts([SCORER.neutral, ...phrases]);
 const mean = new Float32Array(neutral.length);
 for (const t of bank) { const u = unit(sub(t, neutral)); for (let i = 0; i < mean.length; i++) mean[i] += u[i] / bank.length; }
-const sixDigits = (v) => Array.from(v, (x) => Math.round(x * 1e6) / 1e6);
-writeFileSync(new URL("src/direction-bank.json", import.meta.url), JSON.stringify({
-  scorer: SCORER.key, prompts: BANK.length,
-  mean: sixDigits(mean),
+writeFileSync(new URL("src/bank.json", import.meta.url), JSON.stringify({
+  scorer: SCORER.key, prompts: phrases.length, mean: Array.from(mean, (x) => Math.round(x * 1e6) / 1e6),
 }));
-console.log(`src/direction-bank.json: ${BANK.length} prompts, mean direction length ${Math.hypot(...mean).toFixed(3)}`);
+console.log(`src/bank.json: ${phrases.length} phrases, mean direction length ${Math.hypot(...mean).toFixed(3)}`);
