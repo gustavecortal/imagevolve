@@ -1,6 +1,5 @@
 // CLIP's image input, prepared where a picture is rendered: the whole picture squashed to SIZE x SIZE (SCORER's;
-// 224 is CLIP's own) by an area average (no crop), then normalized as CLIP's processor does, as planar floats. No
-// model code, so the render workers can import it.
+// 224 is CLIP's own) by an area average (no crop), then normalized as CLIP's processor does, as planar floats.
 import { SCORER } from "./objective.mjs";
 
 export const SIZE = SCORER.size;

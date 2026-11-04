@@ -1,4 +1,4 @@
-// Random recipes over the operation table: the page's proposals, and fresh ones beside a kept variant's children.
+// Random recipes over the operation table: the search's proposals, and fresh ones beside a kept variant's children.
 import { OPS, random } from "./effects.mjs";
 
 const NAMES = Object.keys(OPS);

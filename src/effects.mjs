@@ -1,11 +1,11 @@
-// Image operations shared by preview, export, search and the Node scripts.
+// The image operations a recipe chains, and the checks that drop flat or barely changed results.
 // An image is { data: Float32Array of RGB in [0, 1], sRGB-encoded, row-major, width, height }.
 // Positions, sizes and radii are fractions of the longest edge (L), so a recipe looks alike at any resolution.
 // A recipe is a list of nodes { op, params, strength, region? }, each applied to the previous output.
 
-export const TAU = 2 * Math.PI;
+const TAU = 2 * Math.PI;
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
-export const luma = (r, g, b) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+const luma = (r, g, b) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
 
 // Longest edge of candidates during search, in pixels. Export renders the same recipe larger.
 export const WORKING = 320;
@@ -65,7 +65,7 @@ export const OPS = {
       for (let i = 0; i < s.length; i++) d[i] = Math.round(s[i] * n) / n;
     },
   },
-  // Black or white by luminance around a level; softness widens the ramp between them.
+  // Black or white by luminance around a level. Softness widens the ramp between them.
   threshold: {
     params: { level: [0.1, 0.9, 0.5], softness: [0.005, 0.3, 0.05] },
     apply(s, d, { level, softness }) {
@@ -83,7 +83,7 @@ export const OPS = {
     },
   },
   // Monochrome film grain from seeded value noise. Size is the grain cell, at least about a pixel at the
-  // 320 px working size, so the preview's grain is the export's, smoothly interpolated.
+  // 320 px working size, so the search's grain is the saved picture's, smoothly interpolated.
   grain: {
     params: { amount: [0, 0.5, 0.1], size: [0.003, 0.02, 0.004], seed: [0, 9999, 1] }, int: ["seed"],
     apply(s, d, { amount, size, seed }, { w, h, L }) {
@@ -265,7 +265,7 @@ export const OPS = {
 };
 
 // Hue rotation about the grey axis (a luminance-preserving matrix, row by row), for a hue in degrees.
-export function hueMatrix(hue) {
+function hueMatrix(hue) {
   const a = (hue * Math.PI) / 180, c = Math.cos(a), n = Math.sin(a);
   return [0.213 + c * 0.787 - n * 0.213, 0.715 - c * 0.715 - n * 0.715, 0.072 - c * 0.072 + n * 0.928,
     0.213 - c * 0.213 + n * 0.143, 0.715 + c * 0.285 + n * 0.14, 0.072 - c * 0.072 - n * 0.283,
@@ -273,7 +273,7 @@ export function hueMatrix(hue) {
 }
 
 // The tiles' seeded tables: each tile's source tile, and its flips (1 across, 2 down, 3 both).
-export function tileTables(p) {
+function tileTables(p) {
   const n = p.cols * p.rows, rnd = random(p.seed), order = [...Array(n).keys()];
   const moving = order.filter(() => rnd() < p.shuffle), shuffled = moving.slice();
   shuffle(shuffled, rnd);
@@ -282,25 +282,23 @@ export function tileTables(p) {
 }
 
 // Each strip's seeded shift.
-export const stripOffsets = (p) => { const rnd = random(p.seed); return Array.from({ length: p.count }, () => (rnd() * 2 - 1) * p.shift); };
+const stripOffsets = (p) => { const rnd = random(p.seed); return Array.from({ length: p.count }, () => (rnd() * 2 - 1) * p.shift); };
 
 // Regions that confine a node. x, y, w, h are fractions of width and height: shape 0 is that box, 1 an oval inside
 // it. The other shapes are placed at the box's centre and sized in units of the longest edge: 2 a band at angle, h
 // thick; 3 the half-plane on one side of a line at angle; 4 a ring w across and h/4 thick; 5 patches of seeded noise
 // of feature size w covering about a share level of the picture; 6 the parts brighter than level (the picture's own
-// light). invert swaps inside and outside. feather is the width of the soft border. Recipes of version 1 marked an
-// oval with ellipse: 1.
+// light). invert swaps inside and outside. feather is the width of the soft border.
 const REGION = {
   x: [0, 1, 0], y: [0, 1, 0], w: [0.05, 1, 1], h: [0.05, 1, 1], feather: [0, 0.3, 0.02],
   shape: [0, 6, 0], angle: [-180, 180, 0], invert: [0, 1, 0], level: [0, 1, 0.5], seed: [0, 9999, 1],
 };
 
-// Scratch buffers kept between renders (each is written whole before it is read), so the render workers do not
-// allocate several picture-sized arrays per candidate.
+// Scratch buffers kept between renders (each is written whole before it is read), so the search does not allocate
+// several picture-sized arrays per candidate.
 // Named: "fx" each operation's output in render, "blurA" and "blurB" the blur's passes, "luma" the ink lines'. Release
 // them (releaseScratch) after a large render, such as a save, so they do not stay at that size.
 const scratchPool = new Map();
-export const releaseScratch = () => scratchPool.clear();
 
 // Apply a recipe to an image. Unknown operations or parameters and non-finite values throw. Values are clamped
 // to their bounds. A node at strength 0 is skipped.
@@ -342,8 +340,7 @@ export function normalized(nodes) {
     if (!Number.isFinite(strength)) throw new Error(`${node.op}.strength is not a finite number`);
     const out = { op: node.op, params: bounded(def.params, node.params ?? {}, def.int, node.op), strength };
     if (node.region) {
-      const { ellipse, ...region } = node.region;
-      out.region = bounded(REGION, { ...region, shape: region.shape ?? (Number(ellipse) ? 1 : 0) }, ["shape", "invert", "seed"], "region");
+      out.region = bounded(REGION, node.region, ["shape", "invert", "seed"], "region");
     }
     return out;
   });
@@ -385,14 +382,14 @@ function regionMask(region, ctx) {
 }
 
 // A region's feather (above 0), centre, the picture's sides in units of the longest edge, and the unit normal of its
-// angle, as regionMask and gpu-render.mjs read them.
-export function regionGeometry({ x, y, w, h, feather, angle }, { w: W, h: H, L }) {
+// angle, as regionMask reads them.
+function regionGeometry({ x, y, w, h, feather, angle }, { w: W, h: H, L }) {
   const a = (angle * Math.PI) / 180;
   return { f: Math.max(feather, 1e-6), cx: x + w / 2, cy: y + h / 2, sx: W / L, sy: H / L, nx: -Math.sin(a), ny: Math.cos(a) };
 }
 
 // A point given in fractions of width and height, in units of the longest edge.
-export const point = (fx, fy, { w, h, L }) => [(fx * w) / L, (fy * h) / L];
+const point = (fx, fy, { w, h, L }) => [(fx * w) / L, (fy * h) / L];
 
 // Fill d by sampling s where map(v, us, xs, ys) puts each output pixel of a row, all in units of the longest edge:
 // bilinear at pixel coordinates, mirrored at the borders.
@@ -425,12 +422,12 @@ function mirror(t, n) {
   return t > n - 1 ? p - t : t;
 }
 
-// Three box blurs approximate a Gaussian. Radius in fractions of the longest edge; a fractional pixel radius
+// Three box blurs approximate a Gaussian. Radius in fractions of the longest edge. A fractional pixel radius
 // weights the two outermost samples, so small radii still blur. Borders clamp to the edge pixel.
 // The blur radius of ink lines, as a fraction of the longest edge.
-export const EDGE_BLUR = 0.004;
+const EDGE_BLUR = 0.004;
 // A blur radius in pixels, or 0 where it is too small to blur.
-export const blurPixels = (radius, L) => (radius * L < 0.05 ? 0 : radius * L);
+const blurPixels = (radius, L) => (radius * L < 0.05 ? 0 : radius * L);
 
 function blur(s, radius, ctx) {
   const r = blurPixels(radius, ctx.L);
@@ -487,7 +484,7 @@ const FLAT = { contrast: 0.03, featureless: 0.75 };
 
 // The grid of cells about `across` along the longest edge: the cell side c in pixels, columns and rows, and each
 // cell's pixel count.
-export function grid(width, height, across) {
+function grid(width, height, across) {
   const c = Math.ceil(Math.max(width, height) / across), cols = Math.ceil(width / c), rows = Math.ceil(height / c);
   const n = Float64Array.from({ length: cols * rows }, (_, k) => Math.min(c, width - (k % cols) * c) * Math.min(c, height - Math.floor(k / cols) * c));
   return { c, cols, rows, n };
@@ -515,10 +512,10 @@ const contrastOf = (all) => {
 };
 const featurelessOf = (all) => all.filter((c) => c.variance < 0.02 ** 2).length / all.length;
 // The grids the two measures use.
-export const COARSE = 12, FINE = 24;
+const COARSE = 12, FINE = 24;
 
-export const contrast = (img) => contrastOf(cells(img, COARSE));
-export const featureless = (img) => featurelessOf(cells(img, FINE));
+const contrast = (img) => contrastOf(cells(img, COARSE));
+const featureless = (img) => featurelessOf(cells(img, FINE));
 
 // A picture that reads as empty. With the source given, the limits loosen for a source that is itself plain (a
 // drawing on white), so its variants are not all rejected: half its contrast at most, and its featureless share
@@ -531,8 +528,8 @@ export const isFlat = (img, source) => flat(cells(img, COARSE), cells(img, FINE)
 
 // How far a picture moved from the source: the mean change of a pixel (the mean of its channels' changes), and the
 // share of pixels that changed by more than `over`.
-export const OVER = 0.3;
-export function change({ data }, source, over = OVER) {
+const OVER = 0.3;
+function change({ data }, source, over = OVER) {
   let sum = 0, moved = 0;
   for (let i = 0; i < data.length; i += 3) {
     const d = (Math.abs(data[i] - source.data[i]) + Math.abs(data[i + 1] - source.data[i + 1]) + Math.abs(data[i + 2] - source.data[i + 2])) / 3;
@@ -549,11 +546,6 @@ export function change({ data }, source, over = OVER) {
 const unchanged = (c) => c.mean < 0.05 && c.moved < 0.05;
 export const barelyChanged = (img, source) => unchanged(change(img, source));
 
-// The same two checks for a picture measured elsewhere (gpu-render.mjs): its sums and counts over the COARSE and
-// FINE grids ({ s, s2, n } each, n from grid) and its change ({ mean, moved }). True when the candidate is dropped.
-export const rejected = ({ coarse, fine, change: c }, source) =>
-  flat(fromSums(coarse.s, coarse.s2, coarse.n), fromSums(fine.s, fine.s2, fine.n), source) || unchanged(c);
-
 const known = new WeakMap();
 function limits(source) {
   if (!known.has(source)) known.set(source, { contrast: Math.min(FLAT.contrast, contrast(source) / 2), featureless: Math.max(FLAT.featureless, featureless(source) + 0.05) });
@@ -561,7 +553,7 @@ function limits(source) {
 }
 
 // The list shuffled in place (Fisher-Yates), the same order in every engine for a seeded rnd.
-export function shuffle(list, rnd) {
+function shuffle(list, rnd) {
   for (let i = list.length - 1; i > 0; i--) {
     const j = Math.floor(rnd() * (i + 1));
     [list[i], list[j]] = [list[j], list[i]];

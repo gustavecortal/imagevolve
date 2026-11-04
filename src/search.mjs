@@ -1,5 +1,5 @@
 // The search: random recipes, or children of a kept entry, and a pool kept varied by comparing the candidates'
-// image embeddings. Pure logic, the same in the browser worker and the Node scripts.
+// image embeddings. Pure logic, the same as on the web page.
 // An entry is { recipe, emb, delta, score }: emb the candidate's unit image embedding, delta its change from the
 // original's, score the length of that change along the prompt's unit direction. Unlike the cosine between the
 // two, this rewards a larger change: with the cosine, the search settled on lightly altered photographs, and a

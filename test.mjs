@@ -10,10 +10,10 @@ const throws = (f) => { try { f(); return false; } catch { return true; } };
 const checks = {
   "empty recipe is the identity": same(render(img, []), img),
   "strength 0 is the identity for every operation": Object.keys(OPS).every((op) => same(render(img, [{ op, params: {}, strength: 0 }]), img)),
-  "a recipe renders the same twice": (() => { const r = randomRecipe(random(7), 6, 6); return same(render(img, r), render(img, r)); })(),
+  "a recipe renders the same twice": (() => { const r = randomRecipe(random(7)); return same(render(img, r), render(img, r)); })(),
   "order matters (tiles then swirl differs from swirl then tiles)": !same(
     render(img, [{ op: "tiles", params: {} }, { op: "swirl", params: {} }]), render(img, [{ op: "swirl", params: {} }, { op: "tiles", params: {} }])),
-  "outputs stay finite and in [0, 1]": (() => { const r = render(img, randomRecipe(random(9), 8, 8)); return r.data.every((v) => v >= 0 && v <= 1); })(),
+  "a long recipe stays finite and in [0, 1]": (() => { const long = [...randomRecipe(random(9)), ...randomRecipe(random(10))].slice(0, 8), r = render(img, long); return r.data.every((v) => v >= 0 && v <= 1); })(),
   "an unknown operation throws": throws(() => render(img, [{ op: "nope" }])),
   "an unknown parameter throws": throws(() => render(img, [{ op: "tone", params: { satuation: 1 } }])),
   "a non-finite parameter throws": throws(() => render(img, [{ op: "tone", params: { gain: NaN } }])),

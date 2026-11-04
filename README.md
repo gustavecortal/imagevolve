@@ -17,7 +17,7 @@ npm install
 node evolve.mjs docs/sample.jpg "a storm at sea"
 ```
 
-The first run downloads [the model](https://huggingface.co/gustavecortal/imagevolve-clip-vit-base-patch32) (154 MB). The search then scores 800 variants on the CPU, which takes about a minute on a desktop processor, and saves the eight it keeps to `out/` as `1.jpg` to `8.jpg`, each with its program in `1.json` to `8.json`.
+The first run downloads [the model](https://huggingface.co/gustavecortal/imagevolve-clip-vit-base-patch32) (154 MB). The search then scores 800 variants on the CPU, which takes under a minute on a desktop processor, and saves the eight it keeps to `out/` as `1.jpg` to `8.jpg`, each with its program in `1.json` to `8.json`.
 
 To breed from a variant you like, as tapping it on the web page does, run the search again from it:
 
@@ -44,7 +44,7 @@ The search keeps the eight best variants that do not look alike, their image emb
 
 | File | Contents |
 |---|---|
-| [`src/effects.mjs`](src/effects.mjs) | The 18 image operations and their soft masks |
+| [`src/effects.mjs`](src/effects.mjs) | The 17 image operations and their soft masks |
 | [`src/recipes.mjs`](src/recipes.mjs) | Random programs |
 | [`src/search.mjs`](src/search.mjs) | Proposals, mutations and the choice of the eight kept variants |
 | [`src/direction.mjs`](src/direction.mjs) | The text direction a variant is scored along |

@@ -10,7 +10,7 @@ import { parseArgs } from "node:util";
 import sharp from "sharp";
 import { loadClip } from "./src/clip.mjs";
 import { promptDirection } from "./src/direction.mjs";
-import { WORKING, random, render } from "./src/effects.mjs";
+import { WORKING, normalized, random, render } from "./src/effects.mjs";
 import { SCORER, dot, sub } from "./src/objective.mjs";
 import { select, step } from "./src/search.mjs";
 
@@ -22,7 +22,8 @@ const { values: opts, positionals: [photo, phrase] } = parseArgs({
     out: { type: "string", default: "out" }, size: { type: "string", default: "2048" }, keep: { type: "string" },
   },
 });
-if (!photo || !phrase) {
+const [proposals, seed, size] = [opts.proposals, opts.seed, opts.size].map(Number);
+if (!photo || !phrase || ![proposals, seed, size].every(Number.isInteger) || proposals < 1 || size < 1) {
   console.error('Usage: node evolve.mjs <photo> "<phrase>" [--proposals N] [--seed N] [--out DIR] [--size N] [--keep FILE]');
   process.exit(1);
 }
@@ -41,25 +42,26 @@ const scorer = await loadClip();
 const source = await load(photo, WORKING), [orig] = await scorer.embedImages([source]);
 const [neutral, words] = await scorer.embedTexts([SCORER.neutral, phrase]);
 const direction = promptDirection(words, neutral);
-const options = { source, orig, direction, embed: scorer.embedImages, rnd: random(Number(opts.seed)), batch: BATCH, id: ((n) => () => n++)(0) };
+const options = { source, orig, direction, embed: scorer.embedImages, rnd: random(seed), batch: BATCH, id: ((n) => () => n++)(0) };
 
 // A kept variant, pinned: the search breeds three proposals in four from it.
 let pool = [];
 if (opts.keep) {
-  const { recipe } = JSON.parse(readFileSync(opts.keep, "utf8"));
+  const recipe = normalized(JSON.parse(readFileSync(opts.keep, "utf8")).recipe);
   const [emb] = await scorer.embedImages([render(source, recipe)]), delta = sub(emb, orig);
   pool = [{ id: -1, recipe, emb, delta, score: dot(delta, direction), pinned: true }];
 }
 
 const started = performance.now();
-for (let n = 0; n < Number(opts.proposals); n += BATCH) {
+for (let n = 0; n < proposals; n += BATCH) {
   pool = select([...pool, ...(await step(pool, options))], POOL);
-  process.stderr.write(`\r${n + BATCH} proposals, best score ${pool[0]?.score.toFixed(3) ?? "-"}`);
+  const best = Math.max(...pool.map((entry) => entry.score));
+  process.stderr.write(`\r${n + BATCH} proposals, best score ${pool.length ? best.toFixed(3) : "-"}`);
 }
 console.error(` in ${((performance.now() - started) / 1000).toFixed(0)} s`);
 
 mkdirSync(opts.out, { recursive: true });
-const full = await load(photo, Number(opts.size));
+const full = await load(photo, size);
 for (const [k, { recipe, score }] of pool.entries()) {
   await save(render(full, recipe), `${opts.out}/${k + 1}.jpg`);
   writeFileSync(`${opts.out}/${k + 1}.json`, JSON.stringify({ phrase, score: Math.round(score * 1e4) / 1e4, recipe }, null, 1));

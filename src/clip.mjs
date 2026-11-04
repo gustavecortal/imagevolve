@@ -2,7 +2,7 @@
 // normalization (clip-input.mjs), the projection models' embeddings, L2-normalized. The model files are downloaded
 // from the Hub at the revision objective.mjs pins, checked against their SHA-256, and kept in models/.
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Tokenizer } from "@huggingface/tokenizers";
@@ -13,19 +13,21 @@ import { SCORER, unit } from "./objective.mjs";
 const CONTEXT = 77;  // tokens
 const END = 49407;  // <|endoftext|>
 
-// A file of the scorer's repository, from models/ or else from the Hub, as bytes.
+// A file of the scorer's repository as bytes: the copy in models/ when its SHA-256 is the pinned one, else the Hub's.
 async function read(path) {
-  const local = new URL(`../models/${SCORER.repo}/${path}`, import.meta.url);
-  let bytes = await readFile(local).catch(() => null);
-  if (!bytes) {
-    console.error(`Downloading ${path}`);
-    const response = await fetch(`https://huggingface.co/${SCORER.repo}/resolve/${SCORER.revision}/${path}`);
-    if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
-    bytes = Buffer.from(await response.arrayBuffer());
-    if (createHash("sha256").update(bytes).digest("hex") !== SCORER.sha256[path]) throw new Error(`${path}: wrong SHA-256`);
-    await mkdir(dirname(fileURLToPath(local)), { recursive: true });
-    await writeFile(local, bytes);
-  }
+  const local = fileURLToPath(new URL(`../models/${SCORER.repo}/${path}`, import.meta.url));
+  const pinned = (bytes) => createHash("sha256").update(bytes).digest("hex") === SCORER.sha256[path];
+  const cached = await readFile(local).catch(() => null);
+  if (cached && pinned(cached)) return new Uint8Array(cached);
+  console.error(`Downloading ${path}`);
+  const response = await fetch(`https://huggingface.co/${SCORER.repo}/resolve/${SCORER.revision}/${path}`);
+  if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (!pinned(bytes)) throw new Error(`${path}: wrong SHA-256`);
+  // Written whole, then renamed, so an interrupted run leaves no partial file behind.
+  await mkdir(dirname(local), { recursive: true });
+  await writeFile(`${local}.part`, bytes);
+  await rename(`${local}.part`, local);
   return new Uint8Array(bytes);
 }
 

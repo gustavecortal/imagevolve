@@ -13,6 +13,12 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
+          cache: npm
+      # The model files are pinned in src/objective.mjs, so its hash keys the cache.
+      - uses: actions/cache@v6
+        with:
+          path: models
+          key: models-${{ hashFiles('src/objective.mjs') }}
       - run: npm ci
       - run: node test.mjs
       - run: node evolve.mjs docs/sample.jpg "a storm at sea" --proposals 32
