@@ -8,8 +8,6 @@
 
 ## Quick start
 
-With [Node.js](https://nodejs.org/) 24 or later:
-
 ```bash
 git clone https://github.com/gustavecortal/imagevolve.git
 cd imagevolve
@@ -28,8 +26,6 @@ node evolve.mjs docs/sample.jpg "a storm at sea" --keep out/3.json --out out2
 A variant is a program of a few image operations, such as tile shuffles, swirls or recolourings. No model draws anything: [CLIP](https://github.com/openai/CLIP) only scores each variant by how far it moves the picture toward your words. The search keeps the eight best variants that do not look alike. After you pick one, most new proposals mutate it: a parameter changes, or an operation is added, removed or borrowed from another variant.
 
 ## Rebuild the model
-
-With [uv](https://docs.astral.sh/uv/getting-started/installation/):
 
 ```bash
 uv run export.py
