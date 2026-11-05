@@ -1,6 +1,6 @@
 # imagevolve
 
-[imagevolve](https://gustavecortal.com/imagevolve/) is a CLIP-guided evolutionary search over deterministic image transformations that bring your picture closer to your words. This repository runs the same search from the command line.
+[imagevolve](https://gustavecortal.com/imagevolve/) is a CLIP-guided evolutionary search over deterministic image transformations that bring your picture closer to your words. This repository runs the search of the [live demo](https://gustavecortal.com/imagevolve/) from the command line.
 
 <p align="center">
   <a href="https://gustavecortal.com/imagevolve/"><img src="docs/demo.webp" width="720" alt="imagevolve on &quot;a storm at sea&quot;: a photograph of a carved wooden frame turns into swirling teal variants, one of which is picked and evolved further"></a>
